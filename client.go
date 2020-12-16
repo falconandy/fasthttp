@@ -15,6 +15,14 @@ import (
 	"time"
 )
 
+type ConnectionHook interface {
+	WrapConnection(conn, wrappedSourceConnection net.Conn) net.Conn
+	UnwrapConnection(wrappedConn net.Conn) net.Conn
+	ConnectionData(conn net.Conn) map[string]interface{}
+}
+
+var DefaultConnectionHook ConnectionHook
+
 // Do performs the given http request and fills the given http response.
 //
 // Request must contain at least non-zero RequestURI with full url (including
@@ -1897,12 +1905,25 @@ func dialAddr(addr string, dial DialFunc, dialDualStack, isTLS bool, tlsConfig *
 	if conn == nil {
 		panic("BUG: DialFunc returned (nil, nil)")
 	}
-	_, isTLSAlready := conn.(*tls.Conn)
+	var unwrappedConn = conn
+	if DefaultConnectionHook != nil {
+		unwrappedConn = DefaultConnectionHook.UnwrapConnection(conn)
+	}
+	_, isTLSAlready := unwrappedConn.(*tls.Conn)
 	if isTLS && !isTLSAlready {
+		var tlsConn net.Conn
 		if timeout == 0 {
-			return tls.Client(conn, tlsConfig), nil
+			tlsConn = tls.Client(unwrappedConn, tlsConfig)
+		} else {
+			tlsConn, err = tlsClientHandshake(unwrappedConn, tlsConfig, timeout)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return tlsClientHandshake(conn, tlsConfig, timeout)
+		if DefaultConnectionHook != nil {
+			tlsConn = DefaultConnectionHook.WrapConnection(tlsConn, conn)
+		}
+		return tlsConn, nil
 	}
 	return conn, nil
 }

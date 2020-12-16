@@ -92,6 +92,9 @@ type Response struct {
 	raddr net.Addr
 	// Local TCPAddr from concurrently net.Conn
 	laddr net.Addr
+
+	// Arbitrary data
+	connectionData map[string]interface{}
 }
 
 // SetHost sets host for the request.
@@ -301,6 +304,9 @@ func (w *requestBodyWriter) Write(p []byte) (int, error) {
 func (resp *Response) parseNetConn(conn net.Conn) {
 	resp.raddr = conn.RemoteAddr()
 	resp.laddr = conn.LocalAddr()
+	if DefaultConnectionHook != nil {
+		resp.connectionData = DefaultConnectionHook.ConnectionData(conn)
+	}
 }
 
 // RemoteAddr returns the remote network address. The Addr returned is shared
@@ -313,6 +319,10 @@ func (resp *Response) RemoteAddr() net.Addr {
 // by all invocations of LocalAddr, so do not modify it.
 func (resp *Response) LocalAddr() net.Addr {
 	return resp.laddr
+}
+
+func (resp *Response) ConnectionData() map[string]interface{} {
+	return resp.connectionData
 }
 
 // Body returns response body.
@@ -742,6 +752,7 @@ func (resp *Response) copyToSkipBody(dst *Response) {
 	dst.SkipBody = resp.SkipBody
 	dst.raddr = resp.raddr
 	dst.laddr = resp.laddr
+	dst.connectionData = resp.connectionData
 }
 
 func swapRequestBody(a, b *Request) {
@@ -941,6 +952,7 @@ func (resp *Response) Reset() {
 	resp.raddr = nil
 	resp.laddr = nil
 	resp.ImmediateHeaderFlush = false
+	resp.connectionData = nil
 }
 
 func (resp *Response) resetSkipHeader() {
