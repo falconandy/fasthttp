@@ -94,7 +94,15 @@ type Response struct {
 	laddr net.Addr
 
 	// Arbitrary data
-	connectionData map[string]interface{}
+	connectionData ResponseConnectionData
+}
+
+type ResponseConnectionData map[string]interface{}
+
+func (d ResponseConnectionData) Add(data map[string]interface{}) {
+	for key, value := range data {
+		d[key] = value
+	}
 }
 
 // SetHost sets host for the request.
@@ -304,9 +312,6 @@ func (w *requestBodyWriter) Write(p []byte) (int, error) {
 func (resp *Response) parseNetConn(conn net.Conn) {
 	resp.raddr = conn.RemoteAddr()
 	resp.laddr = conn.LocalAddr()
-	if DefaultConnectionHook != nil {
-		resp.connectionData = DefaultConnectionHook.ConnectionData(conn)
-	}
 }
 
 // RemoteAddr returns the remote network address. The Addr returned is shared

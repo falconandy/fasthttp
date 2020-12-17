@@ -18,7 +18,8 @@ import (
 type ConnectionHook interface {
 	WrapConnection(conn, wrappedSourceConnection net.Conn) net.Conn
 	UnwrapConnection(wrappedConn net.Conn) net.Conn
-	ConnectionData(conn net.Conn) map[string]interface{}
+	ConnectionStartData(conn net.Conn) map[string]interface{}
+	ConnectionEndData(conn net.Conn) map[string]interface{}
 }
 
 var DefaultConnectionHook ConnectionHook
@@ -1329,6 +1330,9 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 	conn := cc.c
 
 	resp.parseNetConn(conn)
+	if DefaultConnectionHook != nil {
+		resp.connectionData = DefaultConnectionHook.ConnectionStartData(conn)
+	}
 
 	if c.WriteTimeout > 0 {
 		// Set Deadline every time, since golang has fixed the performance issue
@@ -1336,6 +1340,9 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		currentTime := time.Now()
 		if err = conn.SetWriteDeadline(currentTime.Add(c.WriteTimeout)); err != nil {
 			c.closeConn(cc)
+			if DefaultConnectionHook != nil {
+				resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+			}
 			return true, err
 		}
 	}
@@ -1363,6 +1370,9 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 	if err != nil {
 		c.releaseWriter(bw)
 		c.closeConn(cc)
+		if DefaultConnectionHook != nil {
+			resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+		}
 		return true, err
 	}
 	c.releaseWriter(bw)
@@ -1373,6 +1383,9 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		currentTime := time.Now()
 		if err = conn.SetReadDeadline(currentTime.Add(c.ReadTimeout)); err != nil {
 			c.closeConn(cc)
+			if DefaultConnectionHook != nil {
+				resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+			}
 			return true, err
 		}
 	}
@@ -1390,6 +1403,9 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		c.closeConn(cc)
 		// Don't retry in case of ErrBodyTooLarge since we will just get the same again.
 		retry := err != ErrBodyTooLarge
+		if DefaultConnectionHook != nil {
+			resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+		}
 		return retry, err
 	}
 	c.releaseReader(br)
@@ -1400,6 +1416,9 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		c.releaseConn(cc)
 	}
 
+	if DefaultConnectionHook != nil {
+		resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+	}
 	return false, err
 }
 
@@ -1913,9 +1932,9 @@ func dialAddr(addr string, dial DialFunc, dialDualStack, isTLS bool, tlsConfig *
 	if isTLS && !isTLSAlready {
 		var tlsConn net.Conn
 		if timeout == 0 {
-			tlsConn = tls.Client(unwrappedConn, tlsConfig)
+			tlsConn = tls.Client(conn, tlsConfig)
 		} else {
-			tlsConn, err = tlsClientHandshake(unwrappedConn, tlsConfig, timeout)
+			tlsConn, err = tlsClientHandshake(conn, tlsConfig, timeout)
 			if err != nil {
 				return nil, err
 			}
