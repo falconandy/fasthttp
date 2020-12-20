@@ -18,8 +18,8 @@ import (
 type ConnectionHook interface {
 	WrapConnection(conn, wrappedSourceConnection net.Conn) net.Conn
 	UnwrapConnection(wrappedConn net.Conn) net.Conn
-	ConnectionStartData(conn net.Conn) map[string]interface{}
-	ConnectionEndData(conn net.Conn) map[string]interface{}
+	OnResponseAttachToConnection(req *Request, resp *Response, conn net.Conn)
+	OnResponseDetachFromConnection(resp *Response, conn net.Conn)
 }
 
 var DefaultConnectionHook ConnectionHook
@@ -1331,7 +1331,7 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 
 	resp.parseNetConn(conn)
 	if DefaultConnectionHook != nil {
-		resp.connectionData = DefaultConnectionHook.ConnectionStartData(conn)
+		DefaultConnectionHook.OnResponseAttachToConnection(req, resp, conn)
 	}
 
 	if c.WriteTimeout > 0 {
@@ -1341,7 +1341,7 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		if err = conn.SetWriteDeadline(currentTime.Add(c.WriteTimeout)); err != nil {
 			c.closeConn(cc)
 			if DefaultConnectionHook != nil {
-				resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+				DefaultConnectionHook.OnResponseDetachFromConnection(resp, conn)
 			}
 			return true, err
 		}
@@ -1371,7 +1371,7 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		c.releaseWriter(bw)
 		c.closeConn(cc)
 		if DefaultConnectionHook != nil {
-			resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+			DefaultConnectionHook.OnResponseDetachFromConnection(resp, conn)
 		}
 		return true, err
 	}
@@ -1384,7 +1384,7 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		if err = conn.SetReadDeadline(currentTime.Add(c.ReadTimeout)); err != nil {
 			c.closeConn(cc)
 			if DefaultConnectionHook != nil {
-				resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+				DefaultConnectionHook.OnResponseDetachFromConnection(resp, conn)
 			}
 			return true, err
 		}
@@ -1404,7 +1404,7 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 		// Don't retry in case of ErrBodyTooLarge since we will just get the same again.
 		retry := err != ErrBodyTooLarge
 		if DefaultConnectionHook != nil {
-			resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+			DefaultConnectionHook.OnResponseDetachFromConnection(resp, conn)
 		}
 		return retry, err
 	}
@@ -1417,7 +1417,7 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 	}
 
 	if DefaultConnectionHook != nil {
-		resp.connectionData.Add(DefaultConnectionHook.ConnectionEndData(conn))
+		DefaultConnectionHook.OnResponseDetachFromConnection(resp, conn)
 	}
 	return false, err
 }

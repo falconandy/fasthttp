@@ -94,15 +94,7 @@ type Response struct {
 	laddr net.Addr
 
 	// Arbitrary data
-	connectionData ResponseConnectionData
-}
-
-type ResponseConnectionData map[string]interface{}
-
-func (d ResponseConnectionData) Add(data map[string]interface{}) {
-	for key, value := range data {
-		d[key] = value
-	}
+	connectionData map[string]interface{}
 }
 
 // SetHost sets host for the request.
@@ -328,6 +320,10 @@ func (resp *Response) LocalAddr() net.Addr {
 
 func (resp *Response) ConnectionData() map[string]interface{} {
 	return resp.connectionData
+}
+
+func (resp *Response) SetConnectionData(data map[string]interface{}) {
+	resp.connectionData = data
 }
 
 // Body returns response body.
